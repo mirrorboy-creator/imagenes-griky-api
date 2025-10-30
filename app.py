@@ -1,27 +1,72 @@
 from flask import Flask, request, jsonify
+import requests
 import os
 
 app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "API de imágenes académicas Griky está activa."
+# === FUNCIONES ===
 
-@app.route('/buscar-imagen', methods=['GET'])
-def buscar_imagen():
-    titulo = request.args.get('titulo', '').lower()
-
-    # 🔍 Simulación de búsqueda de imagen
-    imagen = {
-        "titulo": titulo,
-        "url": f"https://example.com/{titulo.replace(' ', '_')}.jpg",
-        "cita": f"OpenAI. (2025). {titulo.title()}. https://example.com/{titulo.replace(' ', '_')}.jpg"
+def buscar_en_wikimedia(titulo):
+    url = "https://commons.wikimedia.org/w/api.php"
+    params = {
+        "action": "query",
+        "format": "json",
+        "prop": "imageinfo",
+        "generator": "search",
+        "gsrsearch": titulo,
+        "gsrlimit": 1,
+        "iiprop": "url"
     }
 
-    return jsonify(imagen)
+    response = requests.get(url, params=params)
+    data = response.json()
 
-# ✅ Esta parte es FUNDAMENTAL para que funcione en Render
+    if "query" in data:
+        page = next(iter(data["query"]["pages"].values()))
+        image_url = page["imageinfo"][0]["url"]
+        title = page["title"].replace("File:", "")
+        citation = f"Wikimedia Commons. (2025). *{title}* [Imagen]. {image_url}"
+        return {
+            "titulo": titulo,
+            "url": image_url,
+            "cita": citation,
+            "fuente": "Wikimedia Commons",
+            "autor": "Desconocido",
+            "licencia": "CC BY-SA o Dominio público"
+        }
+
+    return None
+
+def generar_con_ia(titulo):
+    image_url = f"https://example.com/ia/{titulo.replace(' ', '_')}.jpg"
+    citation = f"Imagen generada por IA basada en el concepto académico '{titulo}'. (2025). [Imagen generada por IA]. DALL·E / OpenAI. {image_url}"
+    return {
+        "titulo": titulo,
+        "url": image_url,
+        "cita": citation,
+        "fuente": "DALL·E / OpenAI",
+        "autor": "IA",
+        "licencia": "Uso académico permitido (imagen generada por IA)"
+    }
+
+# === RUTA PRINCIPAL ===
+
+@app.route("/buscar-imagen", methods=["GET"])
+def buscar_imagen():
+    titulo = request.args.get("titulo")
+    if not titulo:
+        return jsonify({"error": "Falta el parámetro 'titulo'"}), 400
+
+    # Primero intenta Wikimedia
+    resultado = buscar_en_wikimedia(titulo)
+    if resultado:
+        return jsonify(resultado)
+
+    # Si falla, genera imagen con IA
+    return jsonify(generar_con_ia(titulo))
+
+# === PARA RENDER ===
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Render te da el puerto
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
