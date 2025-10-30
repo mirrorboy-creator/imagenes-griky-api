@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import requests
 import os
+import json
 
 app = Flask(__name__)
 
@@ -49,7 +50,7 @@ def generar_con_ia(titulo):
         "licencia": "Uso académico permitido (imagen generada por IA)"
     }
 
-# === RUTA PRINCIPAL ===
+# === ENDPOINT PRINCIPAL ===
 
 @app.route("/buscar-imagen", methods=["GET"])
 def buscar_imagen():
@@ -57,13 +58,19 @@ def buscar_imagen():
     if not titulo:
         return jsonify({"error": "Falta el parámetro 'titulo'"}), 400
 
-    # Primero intenta Wikimedia
     resultado = buscar_en_wikimedia(titulo)
     if resultado:
         return jsonify(resultado)
 
-    # Si falla, genera imagen con IA
     return jsonify(generar_con_ia(titulo))
+
+# === SERVE openapi.json para el GPT ===
+
+@app.route("/openapi.json")
+def openapi_spec():
+    with open("openapi.json") as f:
+        spec = json.load(f)
+    return jsonify(spec)
 
 # === PARA RENDER ===
 
