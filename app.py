@@ -73,6 +73,12 @@ def openapi_spec():
     return jsonify(spec)
 
 # === PARA RENDER ===
+from flask import send_file
+
+@app.route("/openapi.json")
+def serve_openapi():
+    return send_file("openapi.json", mimetype="application/json")
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
