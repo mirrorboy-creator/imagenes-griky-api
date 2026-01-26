@@ -1,13 +1,21 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import requests
 import os
 import json
 
 app = Flask(__name__)
 
-# === FUNCIONES ===
+# =========================
+# ✅ Health check (Render)
+# =========================
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"ok": True})
 
-def buscar_en_wikimedia(titulo):
+# =========================
+# === FUNCIONES IMÁGENES ===
+# =========================
+def buscar_en_wikimedia(titulo: str):
     url = "https://commons.wikimedia.org/w/api.php"
     params = {
         "action": "query",
@@ -19,15 +27,28 @@ def buscar_en_wikimedia(titulo):
         "iiprop": "url"
     }
 
-    response = requests.get(url, params=params)
+    response = requests.get(url, params=params, timeout=15)
+    if response.status_code != 200:
+        return None
+
     data = response.json()
 
-    if "query" in data:
+    if "query" in data and "pages" in data["query"]:
         page = next(iter(data["query"]["pages"].values()))
-        image_url = page["imageinfo"][0]["url"]
-        title = page["title"].replace("File:", "")
-        citation = f"Wikimedia Commons. (2025). *{title}* [Imagen]. {image_url}"
+        if "imageinfo" not in page or not page["imageinfo"]:
+            return None
+
+        image_url = page["imageinfo"][0].get("url")
+        if not image_url:
+            return None
+
+        title_file = page.get("title", "").replace("File:", "").strip() or "Imagen"
+
+        # Nota: aquí estás poniendo 2025 fijo; si quieres lo hacemos dinámico luego.
+        citation = f"Wikimedia Commons. (2025). *{title_file}* [Imagen]. {image_url}"
+
         return {
+            "ok": True,
             "titulo": titulo,
             "url": image_url,
             "cita": citation,
@@ -38,10 +59,15 @@ def buscar_en_wikimedia(titulo):
 
     return None
 
-def generar_con_ia(titulo):
+def generar_con_ia(titulo: str):
+    # Placeholder (tu lógica real de IA iría aquí)
     image_url = f"https://example.com/ia/{titulo.replace(' ', '_')}.jpg"
-    citation = f"Imagen generada por IA basada en el concepto académico '{titulo}'. (2025). [Imagen generada por IA]. DALL·E / OpenAI. {image_url}"
+    citation = (
+        f"Imagen generada por IA basada en el concepto académico '{titulo}'. (2025). "
+        f"[Imagen generada por IA]. DALL·E / OpenAI. {image_url}"
+    )
     return {
+        "ok": True,
         "titulo": titulo,
         "url": image_url,
         "cita": citation,
@@ -50,13 +76,17 @@ def generar_con_ia(titulo):
         "licencia": "Uso académico permitido (imagen generada por IA)"
     }
 
-# === ENDPOINT PRINCIPAL ===
+# =========================
+# ✅ Endpoint que el Gateway/GPT espera
+# POST /images  { "title": "..."}  (o {"q":"..."})
+# =========================
+@app.route("/images", methods=["POST"])
+def images():
+    data = request.get_json(silent=True) or {}
+    titulo = data.get("title") or data.get("q")
 
-@app.route("/buscar-imagen", methods=["GET"])
-def buscar_imagen():
-    titulo = request.args.get("titulo")
     if not titulo:
-        return jsonify({"error": "Falta el parámetro 'titulo'"}), 400
+        return jsonify({"ok": False, "error": "Missing title"}), 400
 
     resultado = buscar_en_wikimedia(titulo)
     if resultado:
@@ -64,22 +94,35 @@ def buscar_imagen():
 
     return jsonify(generar_con_ia(titulo))
 
-# === SERVE openapi.json para el GPT ===
+# =========================
+# (Opcional) Mantener compatibilidad con tu endpoint viejo
+# GET /buscar-imagen?titulo=...
+# =========================
+@app.route("/buscar-imagen", methods=["GET"])
+def buscar_imagen():
+    titulo = request.args.get("titulo")
+    if not titulo:
+        return jsonify({"ok": False, "error": "Falta el parámetro 'titulo'"}), 400
 
-@app.route("/openapi.json")
-def openapi_spec():
-    with open("openapi.json") as f:
-        spec = json.load(f)
-    return jsonify(spec)
+    resultado = buscar_en_wikimedia(titulo)
+    if resultado:
+        return jsonify(resultado)
 
-# === PARA RENDER ===
-from flask import send_file
+    return jsonify(generar_con_ia(titulo))
 
-@app.route("/openapi.json")
+# =========================
+# ✅ Servir openapi.json (UNA sola vez, sin duplicar rutas)
+# =========================
+@app.route("/openapi.json", methods=["GET"])
 def serve_openapi():
+    # Si existe archivo local, lo sirve. Si no, devuelve error claro.
+    if not os.path.exists("openapi.json"):
+        return jsonify({"ok": False, "error": "openapi.json not found"}), 404
     return send_file("openapi.json", mimetype="application/json")
 
-
+# =========================
+# ✅ Render
+# =========================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
