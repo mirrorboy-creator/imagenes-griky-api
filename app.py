@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify
 import requests
 import os
 import json
@@ -6,8 +6,9 @@ from urllib.parse import quote_plus
 
 app = Flask(__name__)
 
-# === FUNCIONES ===
-
+# =============================================
+# FUNCIÓN: Buscar imagen en Wikimedia Commons
+# =============================================
 def buscar_en_wikimedia(titulo):
     url = "https://commons.wikimedia.org/w/api.php"
     titulo_encoded = quote_plus(titulo)
@@ -47,45 +48,57 @@ def buscar_en_wikimedia(titulo):
             "cita": cita,
             "fuente": "Wikimedia Commons",
             "autor": autor,
-            "licencia": licencia
+            "licencia": licencia,
+            "markdown": f"![{titulo}]({image_url})"
         }
 
     return None
 
+# =============================================
+# FUNCIÓN: Generar imagen con IA (fallback)
+# =============================================
 def generar_con_ia(titulo):
-    # Este es un fallback falso. Puedes integrar DALL·E real si quieres.
-    image_url = f"https://example.com/ia/{quote_plus(titulo)}.jpg"
-    cita = f"Imagen generada por IA basada en el concepto académico '{titulo}'. (2025). [Imagen generada por IA]. DALL·E / OpenAI. {image_url}"
+    titulo_encoded = quote_plus(titulo)
+    image_url = f"https://example.com/ia/{titulo_encoded}.jpg"
+    cita = f"OpenAI. (2025). *{titulo}* [Imagen generada por inteligencia artificial]. DALL·E. {image_url}"
+
     return {
         "titulo": titulo,
         "url": image_url,
         "cita": cita,
         "fuente": "DALL·E / OpenAI",
         "autor": "IA",
-        "licencia": "Uso académico permitido (imagen generada por IA)"
+        "licencia": "Uso académico permitido (imagen generada por IA)",
+        "markdown": f"![{titulo}]({image_url})"
     }
 
-# === ENDPOINT PRINCIPAL ===
-
+# =============================================
+# ENDPOINT PRINCIPAL: /imagenes
+# =============================================
 @app.route("/imagenes", methods=["POST"])
 def buscar_imagen_academica():
     data = request.get_json(silent=True) or {}
     titulo = data.get("titulo")
 
     if not titulo:
-        return jsonify({"ok": False, "error": "El campo 'titulo' es obligatorio"}), 400
+        return jsonify({
+            "ok": False,
+            "error": "El campo 'titulo' es obligatorio"
+        }), 400
 
     resultado = buscar_en_wikimedia(titulo)
     if resultado:
         resultado["ok"] = True
         return jsonify(resultado)
 
+    # Fallback IA si no hay imagen académica real
     fallback = generar_con_ia(titulo)
     fallback["ok"] = True
     return jsonify(fallback)
 
-# === SERVE OPENAPI PARA CHATGPT ===
-
+# =============================================
+# SERVIR EL ARCHIVO /openapi.json
+# =============================================
 @app.route("/openapi.json")
 def serve_openapi():
     try:
@@ -95,14 +108,16 @@ def serve_openapi():
     except Exception as e:
         return jsonify({"error": f"No se pudo cargar openapi.json: {e}"}), 500
 
-# === HEALTH CHECK ===
-
+# =============================================
+# HEALTH CHECK
+# =============================================
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"ok": True})
 
-# === INICIO DEL SERVIDOR ===
-
+# =============================================
+# INICIO DEL SERVIDOR
+# =============================================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
