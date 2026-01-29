@@ -28,7 +28,7 @@ def buscar_en_wikimedia(titulo):
         response.raise_for_status()
         data = response.json()
     except Exception as e:
-        print(f"[ERROR] Wikimedia fallo: {e}")
+        print(f"[ERROR] Wikimedia falló: {e}")
         return None
 
     if "query" in data:
@@ -55,11 +55,11 @@ def buscar_en_wikimedia(titulo):
     return None
 
 # =============================================
-# FUNCIÓN: Generar imagen con IA (fallback)
+# FUNCIÓN: Generar imagen por IA (fallback)
 # =============================================
 def generar_con_ia(titulo):
     titulo_encoded = quote_plus(titulo)
-    image_url = f"https://example.com/ia/{titulo_encoded}.jpg"
+    image_url = f"https://example.com/ia/{titulo_encoded}.jpg"  # <- reemplaza con tu generador real si tienes uno
     cita = f"OpenAI. (2025). *{titulo}* [Imagen generada por inteligencia artificial]. DALL·E. {image_url}"
 
     return {
@@ -91,13 +91,13 @@ def buscar_imagen_academica():
         resultado["ok"] = True
         return jsonify(resultado)
 
-    # Fallback IA si no hay imagen académica real
+    # Fallback: Generar por IA
     fallback = generar_con_ia(titulo)
     fallback["ok"] = True
     return jsonify(fallback)
 
 # =============================================
-# SERVIR EL ARCHIVO /openapi.json
+# SERVIR /openapi.json PARA CHATGPT ACTIONS
 # =============================================
 @app.route("/openapi.json")
 def serve_openapi():
@@ -116,7 +116,7 @@ def health():
     return jsonify({"ok": True})
 
 # =============================================
-# INICIO DEL SERVIDOR
+# INICIAR SERVIDOR
 # =============================================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
