@@ -1,40 +1,42 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Buscador de imágenes académicas",
+    "title": "Imágenes Griky API",
+    "description": "Busca imágenes académicas y retorna la imagen con su cita en formato APA",
     "version": "1.0.0"
   },
+  "servers": [
+    {
+      "url": "https://imagenes-griky-api.onrender.com"
+    }
+  ],
   "paths": {
-    "/buscar-imagen": {
-      "get": {
+    "/imagenes": {
+      "post": {
         "operationId": "buscarImagenAcademica",
-        "summary": "Buscar imagen académica",
-        "description": "Busca una imagen académica por título. Si no se encuentra, la genera con IA.",
-        "parameters": [
-          {
-            "name": "titulo",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Título o palabra clave de la imagen a buscar"
+        "summary": "Buscar imagen académica y cita APA",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "titulo": {
+                    "type": "string",
+                    "example": "Partes del corazón humano"
+                  }
+                },
+                "required": ["titulo"]
+              }
+            }
           }
-        ],
+        },
         "responses": {
           "200": {
             "description": "Respuesta con imagen y cita APA",
             "content": {
-              "application/json": {
-                "example": {
-                  "titulo": "corazon humano",
-                  "url": "https://upload.wikimedia.org/wikipedia/commons/6/6e/Heart_diagram.svg",
-                  "cita": "Wikimedia Commons. (2025). *Heart diagram* [Imagen]. https://upload.wikimedia.org/wikipedia/commons/6/6e/Heart_diagram.svg",
-                  "fuente": "Wikimedia Commons",
-                  "autor": "Desconocido",
-                  "licencia": "CC BY-SA o Dominio público"
-                }
-              }
+              "application/json": {}
             }
           }
         }
