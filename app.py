@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_file
 import requests
 import os
 import json
+from urllib.parse import quote_plus
 
 app = Flask(__name__)
 
@@ -9,23 +10,30 @@ app = Flask(__name__)
 
 def buscar_en_wikimedia(titulo):
     url = "https://commons.wikimedia.org/w/api.php"
+    titulo_encoded = quote_plus(titulo)
+
     params = {
         "action": "query",
         "format": "json",
         "prop": "imageinfo",
         "generator": "search",
-        "gsrsearch": titulo,
+        "gsrsearch": titulo_encoded,
         "gsrlimit": 1,
         "iiprop": "url|extmetadata"
     }
 
-    response = requests.get(url, params=params)
-    data = response.json()
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        print(f"[ERROR] Wikimedia fallo: {e}")
+        return None
 
     if "query" in data:
         page = next(iter(data["query"]["pages"].values()))
         imageinfo = page.get("imageinfo", [{}])[0]
-        image_url = imageinfo.get("url")
+        image_url = imageinfo.get("url", "")
         metadata = imageinfo.get("extmetadata", {})
 
         autor = metadata.get("Artist", {}).get("value", "Desconocido")
@@ -45,7 +53,8 @@ def buscar_en_wikimedia(titulo):
     return None
 
 def generar_con_ia(titulo):
-    image_url = f"https://example.com/ia/{titulo.replace(' ', '_')}.jpg"  # Puedes integrar DALL·E aquí si quieres
+    # Este es un fallback falso. Puedes integrar DALL·E real si quieres.
+    image_url = f"https://example.com/ia/{quote_plus(titulo)}.jpg"
     cita = f"Imagen generada por IA basada en el concepto académico '{titulo}'. (2025). [Imagen generada por IA]. DALL·E / OpenAI. {image_url}"
     return {
         "titulo": titulo,
@@ -56,7 +65,7 @@ def generar_con_ia(titulo):
         "licencia": "Uso académico permitido (imagen generada por IA)"
     }
 
-# === ENDPOINT PRINCIPAL para GPT ===
+# === ENDPOINT PRINCIPAL ===
 
 @app.route("/imagenes", methods=["POST"])
 def buscar_imagen_academica():
@@ -75,19 +84,24 @@ def buscar_imagen_academica():
     fallback["ok"] = True
     return jsonify(fallback)
 
-# === SERVE SPEC PARA GPT ===
+# === SERVE OPENAPI PARA CHATGPT ===
 
 @app.route("/openapi.json")
 def serve_openapi():
-    with open("openapi.json") as f:
-        spec = json.load(f)
-    return jsonify(spec)
+    try:
+        with open("openapi.json") as f:
+            spec = json.load(f)
+        return jsonify(spec)
+    except Exception as e:
+        return jsonify({"error": f"No se pudo cargar openapi.json: {e}"}), 500
 
 # === HEALTH CHECK ===
 
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"ok": True})
+
+# === INICIO DEL SERVIDOR ===
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
