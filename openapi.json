@@ -3,12 +3,12 @@
   "info": {
     "title": "Imágenes Griky API",
     "version": "1.0.0",
-    "description": "API que busca imágenes académicas en fuentes abiertas o las genera con IA si no se encuentran, devolviendo además la referencia en formato APA 7."
+    "description": "API que busca imágenes académicas en fuentes abiertas (Wikimedia, EuropePMC, Openverse, Pixabay) y si no las encuentra, las genera con IA, devolviendo además su referencia en formato APA 7."
   },
   "paths": {
     "/imagenes": {
       "post": {
-        "summary": "Buscar imagen académica",
+        "summary": "Buscar imagen académica y generar APA 7",
         "operationId": "buscarImagenAcademica",
         "requestBody": {
           "required": true,
@@ -19,7 +19,7 @@
                 "properties": {
                   "titulo": {
                     "type": "string",
-                    "description": "Título o tema de la imagen académica (en español o inglés)."
+                    "description": "Título o tema de la imagen (en español o inglés)."
                   }
                 },
                 "required": ["titulo"]
@@ -29,7 +29,7 @@
         },
         "responses": {
           "200": {
-            "description": "Respuesta con los datos de la imagen",
+            "description": "Respuesta con información visual académica",
             "content": {
               "application/json": {
                 "schema": {
@@ -40,17 +40,14 @@
                     "autor": { "type": "string" },
                     "fuente": { "type": "string" },
                     "licencia": { "type": "string" },
-                    "nota": { "type": "string" },
-                    "referencia": { "type": "string" },
-                    "markdown": { "type": "string" },
+                    "nota": { "type": "string", "description": "Texto con formato APA 7 para incluir como pie de figura." },
+                    "referencia": { "type": "string", "description": "Referencia bibliográfica en formato APA 7." },
+                    "markdown": { "type": "string", "description": "Código markdown con la imagen." },
                     "generada_por_ia": { "type": "boolean" }
                   }
                 }
               }
             }
-          },
-          "500": {
-            "description": "Error en la generación o búsqueda de imagen"
           }
         }
       }
