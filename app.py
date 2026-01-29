@@ -1,104 +1,122 @@
 from flask import Flask, request, jsonify
 import requests
-import os
 import json
-from urllib.parse import quote_plus
+import os
 
 app = Flask(__name__)
 
-# =============================================
-# FUNCIÓN: Buscar imagen en Wikimedia Commons
-# =============================================
-def buscar_en_wikimedia(titulo):
-    url = "https://commons.wikimedia.org/w/api.php"
-    titulo_encoded = quote_plus(titulo)
+# ================================================================
+# FUNCIONES AUXILIARES
+# ================================================================
 
+def buscar_en_wikimedia(titulo):
+    """
+    Busca una imagen en Wikimedia Commons con licencia abierta
+    """
+    endpoint = "https://commons.wikimedia.org/w/api.php"
     params = {
         "action": "query",
         "format": "json",
         "prop": "imageinfo",
         "generator": "search",
-        "gsrsearch": titulo_encoded,
+        "gsrsearch": titulo,
         "gsrlimit": 1,
         "iiprop": "url|extmetadata"
     }
 
     try:
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
+        response = requests.get(endpoint, params=params)
         data = response.json()
+
+        pages = data.get("query", {}).get("pages", {})
+        if not pages:
+            return None
+
+        for page_id, page in pages.items():
+            imageinfo = page.get("imageinfo", [])[0]
+            metadata = imageinfo.get("extmetadata", {})
+            licencia = metadata.get("LicenseShortName", {}).get("value", "Desconocida")
+            autor = metadata.get("Artist", {}).get("value", "Desconocido")
+            url = imageinfo.get("url", "")
+            titulo_img = page.get("title", "").replace("File:", "").replace("_", " ")
+
+            return {
+                "titulo": titulo_img,
+                "url": url,
+                "autor": autor,
+                "licencia": licencia,
+                "fuente": "Wikimedia Commons",
+                "año": "s.f.",  # Si no se encuentra, usa sin fecha
+                "tipo": "Diagrama"
+            }
+
     except Exception as e:
-        print(f"[ERROR] Wikimedia falló: {e}")
+        print("Error buscando en Wikimedia:", e)
         return None
 
-    if "query" in data:
-        page = next(iter(data["query"]["pages"].values()))
-        imageinfo = page.get("imageinfo", [{}])[0]
-        image_url = imageinfo.get("url", "")
-        metadata = imageinfo.get("extmetadata", {})
-
-        autor = metadata.get("Artist", {}).get("value", "Desconocido")
-        licencia = metadata.get("LicenseShortName", {}).get("value", "Desconocida")
-        title = page.get("title", "").replace("File:", "")
-        cita = f"Wikimedia Commons. (2025). *{title}* [Imagen]. {image_url}"
-
-        return {
-            "titulo": titulo,
-            "url": image_url,
-            "cita": cita,
-            "fuente": "Wikimedia Commons",
-            "autor": autor,
-            "licencia": licencia,
-            "markdown": f"![{titulo}]({image_url})"
-        }
-
-    return None
-
-# =============================================
-# FUNCIÓN: Generar imagen por IA (fallback)
-# =============================================
 def generar_con_ia(titulo):
-    titulo_encoded = quote_plus(titulo)
-    image_url = f"https://example.com/ia/{titulo_encoded}.jpg"  # <- reemplaza con tu generador real si tienes uno
-    cita = f"OpenAI. (2025). *{titulo}* [Imagen generada por inteligencia artificial]. DALL·E. {image_url}"
-
+    """
+    Simula generación de imagen por IA con referencia académica
+    """
+    url = f"https://example.com/ia/{titulo.replace(' ', '_')}.jpg"
     return {
         "titulo": titulo,
-        "url": image_url,
-        "cita": cita,
+        "url": url,
+        "autor": "OpenAI",
         "fuente": "DALL·E / OpenAI",
-        "autor": "IA",
-        "licencia": "Uso académico permitido (imagen generada por IA)",
-        "markdown": f"![{titulo}]({image_url})"
+        "licencia": "Uso académico permitido (IA)",
+        "referencia": f"OpenAI. (2025). *{titulo}* [Imagen generada por inteligencia artificial]. DALL·E. {url}",
+        "nota": f"**Figura 1.** Imagen generada por IA sobre {titulo.lower()}.",
+        "markdown": f"![{titulo}]({url})"
     }
 
-# =============================================
-# ENDPOINT PRINCIPAL: /imagenes
-# =============================================
+# ================================================================
+# RUTA PRINCIPAL QUE USA TU GPT
+# ================================================================
+
 @app.route("/imagenes", methods=["POST"])
 def buscar_imagen_academica():
-    data = request.get_json(silent=True) or {}
-    titulo = data.get("titulo")
-
-    if not titulo:
-        return jsonify({
-            "ok": False,
-            "error": "El campo 'titulo' es obligatorio"
-        }), 400
+    data = request.get_json()
+    titulo = data.get("titulo", "")
 
     resultado = buscar_en_wikimedia(titulo)
+
     if resultado:
-        resultado["ok"] = True
-        return jsonify(resultado)
+        figura = f"**Figura 1.** {resultado['titulo']}. Imagen académica con licencia {resultado['licencia']}."
+        referencia = f"{resultado['autor']}. ({resultado['año']}). *{resultado['titulo']}* [{resultado['tipo']}]. {resultado['fuente']}. {resultado['url']}"
 
-    # Fallback: Generar por IA
+        return jsonify({
+            "titulo": resultado["titulo"],
+            "url": resultado["url"],
+            "autor": resultado["autor"],
+            "fuente": resultado["fuente"],
+            "licencia": resultado["licencia"],
+            "nota": figura,
+            "referencia": referencia,
+            "markdown": f"![{titulo}]({resultado['url']})",
+            "generada_por_ia": False
+        })
+
+    # Si no se encontró una imagen real adecuada:
     fallback = generar_con_ia(titulo)
-    fallback["ok"] = True
-    return jsonify(fallback)
 
-# =============================================
+    return jsonify({
+        "titulo": fallback["titulo"],
+        "url": fallback["url"],
+        "autor": fallback["autor"],
+        "fuente": fallback["fuente"],
+        "licencia": fallback["licencia"],
+        "nota": fallback["nota"],
+        "referencia": fallback["referencia"],
+        "markdown": fallback["markdown"],
+        "generada_por_ia": True
+    })
+
+
+# ================================================================
 # SERVIR /openapi.json PARA CHATGPT ACTIONS
-# =============================================
+# ================================================================
+
 @app.route("/openapi.json")
 def serve_openapi():
     try:
@@ -108,16 +126,20 @@ def serve_openapi():
     except Exception as e:
         return jsonify({"error": f"No se pudo cargar openapi.json: {e}"}), 500
 
-# =============================================
+
+# ================================================================
 # HEALTH CHECK
-# =============================================
+# ================================================================
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"ok": True})
 
-# =============================================
+
+# ================================================================
 # INICIAR SERVIDOR
-# =============================================
+# ================================================================
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
