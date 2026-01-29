@@ -12,73 +12,39 @@ def health():
     return jsonify({"ok": True})
 
 # =====================================================
-# ENDPOINT DE BÚSQUEDA DE IMÁGENES
+# NUEVO ENDPOINT DE IMÁGENES (POST)
 # =====================================================
 @app.route("/imagenes", methods=["POST"])
-def buscar_imagen():
+def imagenes():
     data = request.get_json(silent=True) or {}
-    titulo = data.get("titulo", "").strip()
 
+    titulo = data.get("titulo")
     if not titulo:
-        return jsonify({"ok": False, "error": "El campo 'titulo' es obligatorio"}), 400
+        return jsonify({"ok": False, "error": "Falta el campo 'titulo'"}), 400
 
-    # ----------------------------
-    # Consulta a Wikimedia Commons API (open access)
-    # ----------------------------
-    search_url = "https://commons.wikimedia.org/w/api.php"
-    params = {
-        "action": "query",
-        "format": "json",
-        "generator": "search",
-        "gsrsearch": titulo,
-        "gsrlimit": 1,
-        "prop": "imageinfo",
-        "iiprop": "url|extmetadata"
-    }
-
-    try:
-        r = requests.get(search_url, params=params, timeout=15)
-        data = r.json()
-    except Exception as e:
-        return jsonify({"ok": False, "error": "Error al consultar Wikimedia Commons"}), 502
-
-    pages = data.get("query", {}).get("pages", {})
-    if not pages:
-        return jsonify({"ok": False, "mensaje": "No se encontraron imágenes en acceso abierto"}), 404
-
-    # Tomamos la primera imagen encontrada
-    page = list(pages.values())[0]
-    imageinfo = page.get("imageinfo", [])[0]
-
-    image_url = imageinfo.get("url")
-    metadata = imageinfo.get("extmetadata", {})
-
-    autor = metadata.get("Artist", {}).get("value", "Autor desconocido")
-    fuente = metadata.get("Credit", {}).get("value", "Wikimedia Commons")
-    licencia = metadata.get("LicenseShortName", {}).get("value", "Licencia abierta")
-
-    titulo_imagen = page.get("title", "Sin título")
-    anio = metadata.get("DateTime", {}).get("value", "s.f.")
-
-    # ----------------------------
-    # Generar referencia APA
-    # ----------------------------
-    referencia = f"{autor}. ({anio}). *{titulo_imagen}*. {fuente}. {image_url}"
-
-    leyenda = f"Figura 1. Imagen relacionada con: {titulo}. Adaptado de {autor}, {anio}."
+    # Simulamos una búsqueda sencilla con Bing Image Search o similar
+    resultados = [
+        {
+            "titulo": titulo,
+            "url": f"https://source.unsplash.com/600x400/?{titulo.replace(' ', '+')}",
+            "fuente": "Unsplash"
+        }
+    ]
 
     return jsonify({
         "ok": True,
-        "titulo_busqueda": titulo,
-        "imagen": image_url,
-        "titulo_imagen": titulo_imagen,
-        "autor": autor,
-        "fuente": fuente,
-        "licencia": licencia,
-        "anio": anio,
-        "referencia_APA": referencia,
-        "leyenda_APA": leyenda
+        "resultados": resultados
     })
+
+# =====================================================
+# MENSAJE SI ABRES /imagenes EN NAVEGADOR (GET)
+# =====================================================
+@app.route("/imagenes", methods=["GET"])
+def imagenes_info():
+    return jsonify({
+        "ok": False,
+        "mensaje": "Este endpoint solo acepta solicitudes POST con JSON. No se usa desde el navegador."
+    }), 405
 
 # =====================================================
 # RENDER
