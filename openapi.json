@@ -1,20 +1,15 @@
 {
-  "openapi": "3.1.0",
+  "openapi": "3.0.0",
   "info": {
     "title": "Imágenes Griky API",
-    "description": "Busca imágenes académicas y retorna la imagen con su cita en formato APA",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "description": "API que busca imágenes académicas en fuentes abiertas o las genera con IA si no se encuentran, devolviendo además la referencia en formato APA 7."
   },
-  "servers": [
-    {
-      "url": "https://imagenes-griky-api.onrender.com"
-    }
-  ],
   "paths": {
     "/imagenes": {
       "post": {
+        "summary": "Buscar imagen académica",
         "operationId": "buscarImagenAcademica",
-        "summary": "Buscar imagen académica y cita APA",
         "requestBody": {
           "required": true,
           "content": {
@@ -24,7 +19,7 @@
                 "properties": {
                   "titulo": {
                     "type": "string",
-                    "example": "Partes del corazón humano"
+                    "description": "Título o tema de la imagen académica (en español o inglés)."
                   }
                 },
                 "required": ["titulo"]
@@ -34,10 +29,28 @@
         },
         "responses": {
           "200": {
-            "description": "Respuesta con imagen y cita APA",
+            "description": "Respuesta con los datos de la imagen",
             "content": {
-              "application/json": {}
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "titulo": { "type": "string" },
+                    "url": { "type": "string", "format": "uri" },
+                    "autor": { "type": "string" },
+                    "fuente": { "type": "string" },
+                    "licencia": { "type": "string" },
+                    "nota": { "type": "string" },
+                    "referencia": { "type": "string" },
+                    "markdown": { "type": "string" },
+                    "generada_por_ia": { "type": "boolean" }
+                  }
+                }
+              }
             }
+          },
+          "500": {
+            "description": "Error en la generación o búsqueda de imagen"
           }
         }
       }
