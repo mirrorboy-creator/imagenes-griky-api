@@ -5,172 +5,181 @@ import os
 
 app = Flask(__name__)
 
-# =====================================================
-# WIKIMEDIA COMMONS (FUENTE PRINCIPAL DE IMÁGENES)
-# =====================================================
+# ===============================
+# FUNCIONES DE BÚSQUEDA EN FUENTES ABIERTAS
+# ===============================
+
 def buscar_en_wikimedia(titulo):
     endpoint = "https://commons.wikimedia.org/w/api.php"
     params = {
         "action": "query",
         "format": "json",
+        "prop": "imageinfo",
         "generator": "search",
         "gsrsearch": titulo,
         "gsrlimit": 1,
-        "prop": "imageinfo",
-        "iiprop": "url|size|extmetadata"
+        "iiprop": "url|extmetadata|size"
     }
 
     try:
-        r = requests.get(endpoint, params=params, timeout=10)
-        data = r.json()
+        response = requests.get(endpoint, params=params)
+        data = response.json()
         pages = data.get("query", {}).get("pages", {})
-
         if not pages:
             return None
 
         for _, page in pages.items():
-            info = page["imageinfo"][0]
-            meta = info.get("extmetadata", {})
+            imageinfo = page.get("imageinfo", [])[0]
+            metadata = imageinfo.get("extmetadata", {})
+            licencia = metadata.get("LicenseShortName", {}).get("value", "Desconocida")
+            autor = metadata.get("Artist", {}).get("value", "Desconocido")
+            url = imageinfo.get("url", "")
+            titulo_img = page.get("title", "").replace("File:", "").replace("_", " ")
+            width = imageinfo.get("width", 0)
 
             return {
-                "titulo": page["title"].replace("File:", "").replace("_", " "),
-                "url": info["url"],
-                "autor": meta.get("Artist", {}).get("value", "Autor desconocido"),
-                "licencia": meta.get("LicenseShortName", {}).get("value", "Licencia abierta"),
+                "titulo": titulo_img,
+                "url": url,
+                "autor": autor,
+                "licencia": licencia,
                 "fuente": "Wikimedia Commons",
-                "anio": meta.get("DateTime", {}).get("value", "s. f."),
-                "tipo": "Imagen académica",
-                "ancho": info.get("width", 0)
+                "año": "s. f.",
+                "tipo": "Diagrama",
+                "ancho": width
             }
 
     except Exception as e:
-        print("Error Wikimedia:", e)
+        print("Error buscando en Wikimedia:", e)
         return None
 
 
-# =====================================================
-# EUROPE PMC (RESPALDO ACADÉMICO – NO IMÁGENES DIRECTAS)
-# =====================================================
-def respaldo_europe_pmc(titulo):
-    try:
-        url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
-        params = {
-            "query": titulo,
-            "format": "json",
-            "pageSize": 1
-        }
-        r = requests.get(url, params=params, timeout=10)
-        data = r.json()
-        results = data.get("resultList", {}).get("result", [])
+def buscar_en_europepmc(titulo):
+    endpoint = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+    params = {
+        "query": f"{titulo} AND HAS_FT:Y",
+        "format": "json",
+        "resultType": "core",
+        "pageSize": 1
+    }
 
+    try:
+        response = requests.get(endpoint, params=params)
+        data = response.json()
+        results = data.get("resultList", {}).get("result", [])
         if not results:
             return None
 
-        art = results[0]
+        article = results[0]
+        title = article.get("title", titulo)
+        author = article.get("authorString", "Desconocido")
+        year = article.get("pubYear", "s. f.")
+        url = article.get("fullTextUrlList", {}).get("fullTextUrl", [{}])[0].get("url", "")
+
         return {
-            "autor": art.get("authorString", "Autores académicos"),
-            "anio": art.get("pubYear", "s. f."),
-            "fuente": "Europe PMC",
-            "titulo": art.get("title", titulo)
+            "titulo": title,
+            "url": url,
+            "autor": author,
+            "licencia": "Desconocida",
+            "fuente": "EuropePMC",
+            "año": year,
+            "tipo": "Imagen de artículo científico",
+            "ancho": 1000  # asumimos calidad decente
         }
 
     except Exception as e:
-        print("Error EuropePMC:", e)
+        print("Error buscando en EuropePMC:", e)
         return None
 
 
-# =====================================================
-# GENERACIÓN CON IA (SOLO SI ES NECESARIO)
-# =====================================================
-def generar_con_ia(titulo, respaldo=None):
+# ===============================
+# GENERAR CON IA SI NO SE ENCUENTRA IMAGEN REAL
+# ===============================
+
+def generar_con_ia(titulo, fuente_base=None):
     url = f"https://example.com/ia/{titulo.replace(' ', '_')}.jpg"
 
-    nota = (
-        f"**Figura 1.** {titulo}. Imagen generada por inteligencia artificial con fines académicos, "
-        f"basada en descripciones y representaciones científicas provenientes de literatura académica."
-    )
+    nota = f"**Figura 1.** Imagen generada por IA sobre {titulo.lower()}."
+    referencia = f"OpenAI. (2025). *{titulo}* [Imagen generada por inteligencia artificial]. DALL·E. {url}"
 
-    referencia = (
-        f"OpenAI. (2025). *{titulo}* [Imagen generada por inteligencia artificial]. "
-        f"DALL·E. {url}"
-    )
-
-    if respaldo:
-        referencia += (
-            f"\n\nFuente académica de referencia: "
-            f"{respaldo['autor']} ({respaldo['anio']}). "
-            f"*{respaldo['titulo']}*. {respaldo['fuente']}."
-        )
+    if fuente_base:
+        nota += f" Basada en una imagen de fuente abierta: {fuente_base['titulo']}."
+        referencia += f"\n\nFuente base: {fuente_base['autor']}. ({fuente_base['año']}). *{fuente_base['titulo']}*. {fuente_base['fuente']}. {fuente_base['url']}"
 
     return {
         "titulo": titulo,
         "url": url,
-        "autor": "No aplica (imagen generada por IA)",
+        "autor": "OpenAI",
         "fuente": "DALL·E / OpenAI",
         "licencia": "Uso académico permitido (imagen generada por IA)",
         "nota": nota,
         "referencia": referencia,
+        "markdown": f"![{titulo}]({url})",
         "generada_por_ia": True
     }
 
-
-# =====================================================
+# ===============================
 # ENDPOINT PRINCIPAL
-# =====================================================
+# ===============================
+
 @app.route("/imagenes", methods=["POST"])
 def buscar_imagen_academica():
     data = request.get_json()
-    titulo = data.get("titulo")
+    titulo = data.get("titulo", "")
 
-    if not titulo:
-        return jsonify({"error": "El campo 'titulo' es obligatorio"}), 400
-
-    # 1️⃣ BUSCAR IMAGEN REAL
+    # Paso 1: Wikimedia
     resultado = buscar_en_wikimedia(titulo)
 
+    # Paso 2: EuropePMC si no se encuentra en Wikimedia
+    if not resultado:
+        resultado = buscar_en_europepmc(titulo)
+
+    # Si se encuentra imagen válida y buena resolución
     if resultado and resultado["ancho"] >= 700:
-        nota = (
-            f"**Figura 1.** {resultado['titulo']}. "
-            f"Imagen académica de acceso abierto."
-        )
-
-        referencia = (
-            f"{resultado['autor']}. ({resultado['anio']}). "
-            f"*{resultado['titulo']}* [{resultado['tipo']}]. "
-            f"{resultado['fuente']}. {resultado['url']}"
-        )
-
+        figura = f"**Figura 1.** {resultado['titulo']}. Imagen académica con licencia {resultado['licencia']}."
+        referencia = f"{resultado['autor']}. ({resultado['año']}). *{resultado['titulo']}* [{resultado['tipo']}]. {resultado['fuente']}. {resultado['url']}"
         return jsonify({
             "titulo": resultado["titulo"],
             "url": resultado["url"],
             "autor": resultado["autor"],
             "fuente": resultado["fuente"],
             "licencia": resultado["licencia"],
-            "nota": nota,
+            "nota": figura,
             "referencia": referencia,
+            "markdown": f"![{titulo}]({resultado['url']})",
             "generada_por_ia": False
         })
 
-    # 2️⃣ RESPALDO ACADÉMICO
-    respaldo = respaldo_europe_pmc(titulo)
-
-    # 3️⃣ GENERAR CON IA
-    return jsonify(generar_con_ia(titulo, respaldo))
+    # Si no hay imagen real válida, generar con IA
+    imagen_ia = generar_con_ia(titulo, fuente_base=resultado if resultado else None)
+    return jsonify(imagen_ia)
 
 
-# =====================================================
-# OPENAPI + HEALTH
-# =====================================================
+# ===============================
+# SERVIR OPENAPI PARA CHATGPT
+# ===============================
+
 @app.route("/openapi.json")
 def serve_openapi():
-    with open("openapi.json") as f:
-        return jsonify(json.load(f))
+    try:
+        with open("openapi.json") as f:
+            spec = json.load(f)
+        return jsonify(spec)
+    except Exception as e:
+        return jsonify({"error": f"No se pudo cargar openapi.json: {e}"}), 500
 
+
+# ===============================
+# SALUD DEL SERVIDOR
+# ===============================
 
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"ok": True})
 
+
+# ===============================
+# INICIAR
+# ===============================
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
