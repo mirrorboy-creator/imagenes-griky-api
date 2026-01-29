@@ -12,42 +12,65 @@ def health():
     return jsonify({"ok": True})
 
 # =====================================================
-# NUEVO ENDPOINT DE IMÁGENES (POST)
+# ENDPOINT DE BÚSQUEDA DE IMÁGENES ACADÉMICAS
 # =====================================================
 @app.route("/imagenes", methods=["POST"])
-def imagenes():
+def buscar_imagen_academica():
     data = request.get_json(silent=True) or {}
-
     titulo = data.get("titulo")
-    if not titulo:
-        return jsonify({"ok": False, "error": "Falta el campo 'titulo'"}), 400
 
-    # Simulamos una búsqueda sencilla con Bing Image Search o similar
-    resultados = [
-        {
-            "titulo": titulo,
-            "url": f"https://source.unsplash.com/600x400/?{titulo.replace(' ', '+')}",
-            "fuente": "Unsplash"
-        }
-    ]
+    if not titulo:
+        return jsonify({
+            "ok": False,
+            "error": "El campo 'titulo' es obligatorio"
+        }), 400
+
+    # Buscar en Wikimedia Commons
+    commons_api = f"https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&titles=File:{titulo.replace(' ', '_')}.svg&iiprop=url|extmetadata"
+
+    try:
+        response = requests.get(commons_api, timeout=15)
+        data = response.json()
+        pages = data.get("query", {}).get("pages", {})
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": "Error al consultar Wikimedia Commons"
+        }), 502
+
+    for page_id, page_data in pages.items():
+        if "imageinfo" in page_data:
+            imageinfo = page_data["imageinfo"][0]
+            metadata = imageinfo.get("extmetadata", {})
+            url = imageinfo.get("url")
+            licencia = metadata.get("LicenseShortName", {}).get("value", "Desconocida")
+            autor = metadata.get("Artist", {}).get("value", "Desconocido")
+
+            return jsonify({
+                "ok": True,
+                "titulo": titulo,
+                "url": url,
+                "autor": autor,
+                "fuente": "Wikimedia Commons",
+                "licencia": licencia,
+                "cita": f"Wikimedia Commons. (2025). {titulo} [Imagen]. {url}"
+            })
+
+    # Si no encuentra, usar Unsplash como fallback
+    fallback_url = f"https://source.unsplash.com/600x400/?{titulo.replace(' ', '+')}"
 
     return jsonify({
         "ok": True,
-        "resultados": resultados
+        "titulo": titulo,
+        "url": fallback_url,
+        "autor": "Desconocido",
+        "fuente": "Unsplash",
+        "licencia": "Libre uso educativo",
+        "cita": f"Unsplash. (s. f.). {titulo} [Imagen]. {fallback_url}"
     })
 
 # =====================================================
-# MENSAJE SI ABRES /imagenes EN NAVEGADOR (GET)
-# =====================================================
-@app.route("/imagenes", methods=["GET"])
-def imagenes_info():
-    return jsonify({
-        "ok": False,
-        "mensaje": "Este endpoint solo acepta solicitudes POST con JSON. No se usa desde el navegador."
-    }), 405
-
-# =====================================================
-# RENDER
+# MAIN
 # =====================================================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
