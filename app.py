@@ -5,104 +5,148 @@ import os
 
 app = Flask(__name__)
 
-# ===============================
-# FUNCIONES DE BÚSQUEDA EN FUENTES ABIERTAS
-# ===============================
+# =============================
+# 1. WIKIMEDIA COMMONS
+# =============================
 
 def buscar_en_wikimedia(titulo):
-    endpoint = "https://commons.wikimedia.org/w/api.php"
-    params = {
-        "action": "query",
-        "format": "json",
-        "prop": "imageinfo",
-        "generator": "search",
-        "gsrsearch": titulo,
-        "gsrlimit": 1,
-        "iiprop": "url|extmetadata|size"
-    }
-
     try:
-        response = requests.get(endpoint, params=params)
+        response = requests.get("https://commons.wikimedia.org/w/api.php", params={
+            "action": "query",
+            "format": "json",
+            "prop": "imageinfo",
+            "generator": "search",
+            "gsrsearch": titulo,
+            "gsrlimit": 1,
+            "iiprop": "url|extmetadata|size"
+        })
+
         data = response.json()
         pages = data.get("query", {}).get("pages", {})
         if not pages:
             return None
 
         for _, page in pages.items():
-            imageinfo = page.get("imageinfo", [])[0]
-            metadata = imageinfo.get("extmetadata", {})
-            licencia = metadata.get("LicenseShortName", {}).get("value", "Desconocida")
-            autor = metadata.get("Artist", {}).get("value", "Desconocido")
-            url = imageinfo.get("url", "")
-            titulo_img = page.get("title", "").replace("File:", "").replace("_", " ")
-            width = imageinfo.get("width", 0)
-
+            img = page.get("imageinfo", [])[0]
+            meta = img.get("extmetadata", {})
             return {
-                "titulo": titulo_img,
-                "url": url,
-                "autor": autor,
-                "licencia": licencia,
+                "titulo": page.get("title", "").replace("File:", "").replace("_", " "),
+                "url": img.get("url", ""),
+                "autor": meta.get("Artist", {}).get("value", "Desconocido"),
+                "licencia": meta.get("LicenseShortName", {}).get("value", "Desconocida"),
                 "fuente": "Wikimedia Commons",
                 "año": "s. f.",
                 "tipo": "Diagrama",
-                "ancho": width
+                "ancho": img.get("width", 0)
             }
-
     except Exception as e:
-        print("Error buscando en Wikimedia:", e)
+        print("Error en Wikimedia:", e)
         return None
 
+# =============================
+# 2. EUROPEPMC
+# =============================
 
 def buscar_en_europepmc(titulo):
-    endpoint = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
-    params = {
-        "query": f"{titulo} AND HAS_FT:Y",
-        "format": "json",
-        "resultType": "core",
-        "pageSize": 1
-    }
-
     try:
-        response = requests.get(endpoint, params=params)
+        response = requests.get("https://www.ebi.ac.uk/europepmc/webservices/rest/search", params={
+            "query": f"{titulo} AND HAS_FT:Y",
+            "format": "json",
+            "resultType": "core",
+            "pageSize": 1
+        })
         data = response.json()
-        results = data.get("resultList", {}).get("result", [])
-        if not results:
+        res = data.get("resultList", {}).get("result", [])
+        if not res:
             return None
-
-        article = results[0]
-        title = article.get("title", titulo)
-        author = article.get("authorString", "Desconocido")
-        year = article.get("pubYear", "s. f.")
-        url = article.get("fullTextUrlList", {}).get("fullTextUrl", [{}])[0].get("url", "")
-
+        art = res[0]
         return {
-            "titulo": title,
-            "url": url,
-            "autor": author,
+            "titulo": art.get("title", titulo),
+            "url": art.get("fullTextUrlList", {}).get("fullTextUrl", [{}])[0].get("url", ""),
+            "autor": art.get("authorString", "Desconocido"),
             "licencia": "Desconocida",
             "fuente": "EuropePMC",
-            "año": year,
+            "año": art.get("pubYear", "s. f."),
             "tipo": "Imagen de artículo científico",
-            "ancho": 1000  # asumimos calidad decente
+            "ancho": 1000
         }
-
     except Exception as e:
-        print("Error buscando en EuropePMC:", e)
+        print("Error en EuropePMC:", e)
         return None
 
+# =============================
+# 3. OPENVERSE
+# =============================
 
-# ===============================
-# GENERAR CON IA SI NO SE ENCUENTRA IMAGEN REAL
-# ===============================
+def buscar_en_openverse(titulo):
+    try:
+        response = requests.get("https://api.openverse.engineering/v1/images", params={
+            "q": titulo,
+            "license_type": "commercial",
+            "license": "cc0,by",
+            "page_size": 1
+        })
+        data = response.json()
+        result = data.get("results", [])
+        if not result:
+            return None
+        img = result[0]
+        return {
+            "titulo": img.get("title", titulo),
+            "url": img.get("url", ""),
+            "autor": img.get("creator", "Desconocido"),
+            "licencia": img.get("license", "Desconocida").upper(),
+            "fuente": "Openverse",
+            "año": "s. f.",
+            "tipo": "Imagen ilustrativa",
+            "ancho": 1000
+        }
+    except Exception as e:
+        print("Error en Openverse:", e)
+        return None
+
+# =============================
+# 4. PIXABAY
+# =============================
+
+def buscar_en_pixabay(titulo):
+    try:
+        response = requests.get("https://pixabay.com/api/", params={
+            "key": "TU_API_KEY_PIXABAY",  # ← Inserta tu API KEY real aquí
+            "q": titulo,
+            "image_type": "illustration",
+            "per_page": 1
+        })
+        data = response.json()
+        hits = data.get("hits", [])
+        if not hits:
+            return None
+        img = hits[0]
+        return {
+            "titulo": img.get("tags", titulo),
+            "url": img.get("largeImageURL", ""),
+            "autor": img.get("user", "Pixabay"),
+            "licencia": "CC0",
+            "fuente": "Pixabay",
+            "año": "s. f.",
+            "tipo": "Ilustración libre",
+            "ancho": img.get("imageWidth", 0)
+        }
+    except Exception as e:
+        print("Error en Pixabay:", e)
+        return None
+
+# =============================
+# 5. GENERACIÓN CON IA
+# =============================
 
 def generar_con_ia(titulo, fuente_base=None):
     url = f"https://example.com/ia/{titulo.replace(' ', '_')}.jpg"
-
     nota = f"**Figura 1.** Imagen generada por IA sobre {titulo.lower()}."
     referencia = f"OpenAI. (2025). *{titulo}* [Imagen generada por inteligencia artificial]. DALL·E. {url}"
 
     if fuente_base:
-        nota += f" Basada en una imagen de fuente abierta: {fuente_base['titulo']}."
+        nota += f" Basada en contenido abierto consultado en {fuente_base['fuente']}."
         referencia += f"\n\nFuente base: {fuente_base['autor']}. ({fuente_base['año']}). *{fuente_base['titulo']}*. {fuente_base['fuente']}. {fuente_base['url']}"
 
     return {
@@ -110,30 +154,35 @@ def generar_con_ia(titulo, fuente_base=None):
         "url": url,
         "autor": "OpenAI",
         "fuente": "DALL·E / OpenAI",
-        "licencia": "Uso académico permitido (imagen generada por IA)",
+        "licencia": "Uso académico permitido (IA)",
         "nota": nota,
         "referencia": referencia,
         "markdown": f"![{titulo}]({url})",
         "generada_por_ia": True
     }
 
-# ===============================
+# =============================
 # ENDPOINT PRINCIPAL
-# ===============================
+# =============================
 
 @app.route("/imagenes", methods=["POST"])
 def buscar_imagen_academica():
     data = request.get_json()
     titulo = data.get("titulo", "")
 
-    # Paso 1: Wikimedia
-    resultado = buscar_en_wikimedia(titulo)
+    fuentes = [
+        buscar_en_wikimedia,
+        buscar_en_europepmc,
+        buscar_en_openverse,
+        buscar_en_pixabay
+    ]
 
-    # Paso 2: EuropePMC si no se encuentra en Wikimedia
-    if not resultado:
-        resultado = buscar_en_europepmc(titulo)
+    resultado = None
+    for fuente in fuentes:
+        resultado = fuente(titulo)
+        if resultado and resultado["ancho"] >= 700:
+            break
 
-    # Si se encuentra imagen válida y buena resolución
     if resultado and resultado["ancho"] >= 700:
         figura = f"**Figura 1.** {resultado['titulo']}. Imagen académica con licencia {resultado['licencia']}."
         referencia = f"{resultado['autor']}. ({resultado['año']}). *{resultado['titulo']}* [{resultado['tipo']}]. {resultado['fuente']}. {resultado['url']}"
@@ -149,37 +198,27 @@ def buscar_imagen_academica():
             "generada_por_ia": False
         })
 
-    # Si no hay imagen real válida, generar con IA
-    imagen_ia = generar_con_ia(titulo, fuente_base=resultado if resultado else None)
-    return jsonify(imagen_ia)
+    return jsonify(generar_con_ia(titulo, fuente_base=resultado if resultado else None))
 
-
-# ===============================
-# SERVIR OPENAPI PARA CHATGPT
-# ===============================
+# =============================
+# SALUD Y OPENAPI
+# =============================
 
 @app.route("/openapi.json")
 def serve_openapi():
     try:
         with open("openapi.json") as f:
-            spec = json.load(f)
-        return jsonify(spec)
+            return jsonify(json.load(f))
     except Exception as e:
-        return jsonify({"error": f"No se pudo cargar openapi.json: {e}"}), 500
-
-
-# ===============================
-# SALUD DEL SERVIDOR
-# ===============================
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"ok": True})
 
-
-# ===============================
-# INICIAR
-# ===============================
+# =============================
+# ARRANQUE
+# =============================
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
