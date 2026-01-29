@@ -5,14 +5,14 @@ import os
 app = Flask(__name__)
 
 # =====================================================
-# HEALTH CHECK
+# HEALTH CHECK (Render)
 # =====================================================
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"ok": True})
 
 # =====================================================
-# ENDPOINT DE BÚSQUEDA DE IMÁGENES ACADÉMICAS
+# ENDPOINT DE BÚSQUEDA DE IMÁGENES CON FALLBACK
 # =====================================================
 @app.route("/imagenes", methods=["POST"])
 def buscar_imagen_academica():
@@ -25,18 +25,15 @@ def buscar_imagen_academica():
             "error": "El campo 'titulo' es obligatorio"
         }), 400
 
-    # Buscar en Wikimedia Commons
+    # === CONSULTA A WIKIMEDIA COMMONS ===
     commons_api = f"https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&titles=File:{titulo.replace(' ', '_')}.svg&iiprop=url|extmetadata"
 
     try:
         response = requests.get(commons_api, timeout=15)
         data = response.json()
         pages = data.get("query", {}).get("pages", {})
-    except Exception as e:
-        return jsonify({
-            "ok": False,
-            "error": "Error al consultar Wikimedia Commons"
-        }), 502
+    except Exception:
+        pages = {}
 
     for page_id, page_data in pages.items():
         if "imageinfo" in page_data:
@@ -56,7 +53,7 @@ def buscar_imagen_academica():
                 "cita": f"Wikimedia Commons. (2025). {titulo} [Imagen]. {url}"
             })
 
-    # Si no encuentra, usar Unsplash como fallback
+    # === FALLBACK A UNSPLASH ===
     fallback_url = f"https://source.unsplash.com/600x400/?{titulo.replace(' ', '+')}"
 
     return jsonify({
@@ -69,8 +66,9 @@ def buscar_imagen_academica():
         "cita": f"Unsplash. (s. f.). {titulo} [Imagen]. {fallback_url}"
     })
 
+
 # =====================================================
-# MAIN
+# RENDER
 # =====================================================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
